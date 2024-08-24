@@ -20,12 +20,15 @@
 
 #define SCREEN_DOWN 0x7EECE8 // may need reversing for endianness
 #define SCREEN_UP   0x7EECF0
+#define CMD_LENGTH  24
 
-// Phase variable stores which part of the waveform generation we are in
-// 0x00 = start of new bit, 0x01 = end of bit
-uint8_t phase = 0x00;
+#define PHASE_ON    0x00
+#define PHASE_OFF   0x01
+#define PHASE_DELAY 0x02
 
-uint8_t bitsToSend = 24; // Always 24 bits
+uint8_t phase = PHASE_ON;
+
+uint8_t bitsToSend = CMD_LENGTH;
 static uint32_t sendBuf = SCREEN_DOWN;
 
 int main (void)
@@ -48,28 +51,36 @@ ISR(TIM0_COMPA_vect) //Timer 0 compare match A interrupt
 {
   PORTB |= _BV(PB1); //enable PB1
   
-  if (phase == 0x00) { // Start of a bit
-    if (sendBuf & 0x01) {
-      OCR0A = 100u; // Long on sequence for a one
-    } else {
-      OCR0A = 50u; // Short on sequence for a zero
-    }
-  } else { // end of a bit
-    if (sendBuf & 0x01) {
-      OCR0A = 50u; // Short off sequence for a one
-    } else {
-      OCR0A = 100u; // Long off sequence for a zero
-    }
-
-    if (bitsToSend > 0) {
-      sendBuf >>= 1;
+  switch (phase)   {
+    case PHASE_ON: // Set on time for a zero or one
+      // Long on sequence for a one, short for a zero
+      OCR0A = (sendBuf & 0x01) ? 100u : 50u;
+      phase = 0x01;
+      break;
+    case PHASE_OFF: // Set off time for a zero or one and shift buffer or switch to idle
+      // Short off sequence for a one, long for a zero
+      if (bitsToSend > 0) {
+        OCR0A = (sendBuf & 0x01) ? 50u : 100u;
+        sendBuf >>= 1;
+        bitsToSend -= 1;
+        phase = 0x00;
+      } else {
+        // End of a pattern; reset buffer and switch to idling
+        sendBuf = SCREEN_DOWN;
+        bitsToSend = CMD_LENGTH;
+        TCCR0A &= ~(_BV(COM0A0) | _BV(COM0A1)); // Disable toggle mode to idle output
+        PORTB &= ~_BV(PB0); //Ensure state is low
+        OCR0A = 150u;
+        phase = PHASE_DELAY;
+      }
+      break;
+    case PHASE_DELAY: 
       bitsToSend -= 1;
-    } else {
-      sendBuf = SCREEN_DOWN;
-      bitsToSend = 24;
-    }
-    
+      if (bitsToSend == 0) {
+        phase = PHASE_ON;
+        bitsToSend = CMD_LENGTH;
+        TCCR0A |= _BV(COM0A0);
+      }
   }
-  phase ^= 0x01; // Toggle phase
-  PORTB ^= _BV(PB1); //clear PB1
+  PORTB &= ~_BV(PB1); //clear PB1
 }
