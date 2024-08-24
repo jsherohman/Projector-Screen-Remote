@@ -19,12 +19,10 @@
 #include <avr/io.h>
 
 #define SCREEN_DOWN 0x7EECE8 // may need reversing for endianness
-//#define SCREEN_DOWN 0xECEF // may need reversing for endianness
-#define SCREEN_UP 0x7EECF0
+#define SCREEN_UP   0x7EECF0
 
-uint8_t temp = 0;
 // Phase variable stores which part of the waveform generation we are in
-// 0x00 = start of new bit, 0x01 = off time for zero value/short, 0x02 = off time for one value/long
+// 0x00 = start of new bit, 0x01 = end of bit
 uint8_t phase = 0x00;
 
 uint8_t bitsToSend = 24; // Always 24 bits
@@ -35,15 +33,12 @@ int main (void)
   DDRB = _BV(PB0) | _BV(PB1); //Set PB0 as output, ignore the rest
   PORTB = _BV(0x00); //Start all bits of Port B at 0; we only care about PB0 though
 
-  //TCNT0 = 0; // Set counter 0 to zero
-
   OCR0A = 25u; // Set compare register A to 255 to start
   TCCR0A = _BV(COM0A0) | _BV(WGM01); // Toggle OC0A on match; CTC mode
-  //TCCR0A =  _BV(WGM01); // Toggle OC0A on match; CTC mode
   TCCR0B = _BV(CS01) | _BV(CS00); // clock frequency / 64
   TIMSK0 = _BV(OCIE0A); // Enable compare match A interrupt
   
-  sei(); //Enable global interrupts
+  sei(); // Enable global interrupts
   
   while(1); // Infinite loop    
 }
@@ -52,14 +47,6 @@ int main (void)
 ISR(TIM0_COMPA_vect) //Timer 0 compare match A interrupt
 {
   PORTB |= _BV(PB1); //enable PB1
-  /*
-  if (!phase) {
-      OCR0A = 50u; // Short on sequence for a zero
-  } else {
-      OCR0A = 100u; // Short on sequence for a zero
-  }
-  phase ^= 0x01; // Toggle phase
-  */
   
   if (phase == 0x00) { // Start of a bit
     if (sendBuf & 0x01) {
@@ -74,20 +61,15 @@ ISR(TIM0_COMPA_vect) //Timer 0 compare match A interrupt
       OCR0A = 100u; // Long off sequence for a zero
     }
 
-    /*
     if (bitsToSend > 0) {
       sendBuf >>= 1;
       bitsToSend -= 1;
     } else {
       sendBuf = SCREEN_DOWN;
       bitsToSend = 24;
-      //sendBuf ^= 0x01;
     }
-    */
     
   }
   phase ^= 0x01; // Toggle phase
-  //TCNT0 = 0;
-  //OCR0A = temp;
   PORTB ^= _BV(PB1); //clear PB1
 }
