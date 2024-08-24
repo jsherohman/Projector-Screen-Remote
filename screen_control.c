@@ -17,7 +17,6 @@
 
 #include <avr/interrupt.h>
 #include <avr/io.h>
-#include <util/delay.h>
 
 #define SCREEN_DOWN 0x7EECE8 // may need reversing for endianness
 //#define SCREEN_DOWN 0xECEF // may need reversing for endianness
@@ -34,36 +33,61 @@ static uint32_t sendBuf = SCREEN_DOWN;
 int main (void)
 {
   DDRB = _BV(PB0) | _BV(PB1); //Set PB0 as output, ignore the rest
-  PORTB = 0x00; //Start all bits of Port B at 0; we only care about PB0 though
+  PORTB = _BV(0x00); //Start all bits of Port B at 0; we only care about PB0 though
 
-  while(1) {
-    //sendData(SCREEN_DOWN, 24);
-    writeOne();
-    _delay_ms(150);
+  //TCNT0 = 0; // Set counter 0 to zero
+
+  OCR0A = 25u; // Set compare register A to 255 to start
+  TCCR0A = _BV(COM0A0) | _BV(WGM01); // Toggle OC0A on match; CTC mode
+  //TCCR0A =  _BV(WGM01); // Toggle OC0A on match; CTC mode
+  TCCR0B = _BV(CS01) | _BV(CS00); // clock frequency / 64
+  TIMSK0 = _BV(OCIE0A); // Enable compare match A interrupt
+  
+  sei(); //Enable global interrupts
+  
+  while(1); // Infinite loop    
+}
+
+
+ISR(TIM0_COMPA_vect) //Timer 0 compare match A interrupt
+{
+  PORTB |= _BV(PB1); //enable PB1
+  /*
+  if (!phase) {
+      OCR0A = 50u; // Short on sequence for a zero
+  } else {
+      OCR0A = 100u; // Short on sequence for a zero
   }
-}
-
-void writeZero() {
-  PORTB |= _BV(PB0);
-  _delay_ms(3);
-  PORTB &= !_BV(PB0);
-  _delay_ms(6);
-}
-
-void writeOne() {
-  PORTB |= _BV(PB0);
-  _delay_ms(6);
-  PORTB &= !_BV(PB0);
-  _delay_ms(3);
-}
-
-void sendData(uint32_t buf, uint8_t bitsToSend) {
-  for (int i = 0; i < bitsToSend; i++) {
-    if (buf & 0x01) {
-      writeOne();
+  phase ^= 0x01; // Toggle phase
+  */
+  
+  if (phase == 0x00) { // Start of a bit
+    if (sendBuf & 0x01) {
+      OCR0A = 100u; // Long on sequence for a one
     } else {
-      writeZero();
+      OCR0A = 50u; // Short on sequence for a zero
     }
-    buf >>= 1;
+  } else { // end of a bit
+    if (sendBuf & 0x01) {
+      OCR0A = 50u; // Short off sequence for a one
+    } else {
+      OCR0A = 100u; // Long off sequence for a zero
+    }
+
+    /*
+    if (bitsToSend > 0) {
+      sendBuf >>= 1;
+      bitsToSend -= 1;
+    } else {
+      sendBuf = SCREEN_DOWN;
+      bitsToSend = 24;
+      //sendBuf ^= 0x01;
+    }
+    */
+    
   }
+  phase ^= 0x01; // Toggle phase
+  //TCNT0 = 0;
+  //OCR0A = temp;
+  PORTB ^= _BV(PB1); //clear PB1
 }
