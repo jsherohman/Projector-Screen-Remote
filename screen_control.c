@@ -37,8 +37,8 @@ int main (void)
   PORTB = 0x00; //Start all bits of Port B at 0; we only care about PB0 though
 
   while(1) {
-    sendData(SCREEN_DOWN, 24);
-    //writeOne();
+    //sendData(SCREEN_DOWN, 24);
+    writeOne();
     _delay_ms(150);
   }
 }
