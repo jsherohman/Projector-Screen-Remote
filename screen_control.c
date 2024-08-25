@@ -87,6 +87,8 @@ ISR(TIM0_COMPA_vect) // Timer 0 compare match A interrupt
           phase = PHASE_ON;
           bitsToSend = CMD_LENGTH;
           TCCR0A |= _BV(COM0A0);
+        } else {
+          TIMSK0 &= ~_BV(OCIE0A); // Disable compare match A interrupt
         }
       }
       break;
