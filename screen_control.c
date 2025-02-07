@@ -26,11 +26,14 @@ static uint32_t sendBuf = SCREEN_DOWN;
 
 int main (void)
 {
-  DDRB = _BV(PB0) | _BV(PB2); // PB0 is radio control pin, PB2 is for monitoring interrupts
+  DDRB = _BV(PB0) | _BV(PB2); // PB0 is radio control pin, PB2 is for monitoring interrupts (PB1 is comparator input)
   PORTB = 0x00; // Start all bits of Port B at 0
 
   ACSR = _BV(ACBG) | _BV(ACIS1) | _BV(ACIS0); // Use internal ~1.1V ref for comparator + input
-  DIDR0 = _BV(AIN1D);
+  DIDR0 = _BV(AIN1D); // Disable digital input on AIN1 since pin is being used for analog comparator
+
+  CLKPR = _BV(CLKPCE);
+  CLKPR = 0x00; // No prescaler
 
   _delay_ms(200);
   sendPreamble();
