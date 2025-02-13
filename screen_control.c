@@ -39,7 +39,7 @@ int main (void)
   sendPreamble();
 
   TCNT0 = 0; // Reset timer
-  OCR0A = 20u; // Set compare register A to 25 to start
+  OCR0A = 20u; // Set compare register A to 20 to start
   TCCR0A = _BV(COM0A0) | _BV(WGM01); // Toggle OC0A on match; CTC mode
   TCCR0B = _BV(CS01) | _BV(CS00); // clock frequency / 64
   TIMSK0 = _BV(OCIE0A); // Enable compare match A interrupt
@@ -116,7 +116,7 @@ ISR(ANA_COMP_vect) // Analog comparator interrupt vector - here if we've lost po
   ACSR &= ~_BV(ACIE); // Disable ACR interrupt so we only get tnterrupted for timer A
   sendPreamble();
   TCNT0 = 0; // Reset timer
-  OCR0A = 20u; // Set compare register A to 25 to start
+  OCR0A = 20u; // Set compare register A to 20 to start
   TCCR0A |= _BV(COM0A0); // Enable toggle mode
   TIMSK0 |= _BV(OCIE0A); // Enable compare match A interrupt
   ACSR |= _BV(ACI); // Force clear the interrupt
