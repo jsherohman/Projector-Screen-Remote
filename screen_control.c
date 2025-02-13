@@ -62,7 +62,7 @@ void sendPreamble() {
 
 ISR(TIM0_COMPA_vect) // Timer 0 compare match A interrupt - generate waveforms
 {
-  PORTB |= _BV(PB2); // enable PB1
+  PORTB |= _BV(PB2); // enable PB2
   
   switch (phase) {
     case PHASE_ON: // Set on time for a zero or one
@@ -115,9 +115,15 @@ ISR(ANA_COMP_vect) // Analog comparator interrupt vector - here if we've lost po
 {
   ACSR &= ~_BV(ACIE); // Disable ACR interrupt so we only get tnterrupted for timer A
   sendPreamble();
+  //TCCR0A |= _BV(COM0A1); // Enable clear mode
+  //TCCR0B |= FOC0A; // Force a match to ensure we start with PB0 cleared
+  //TCCR0A &= ~(_BV(COM0A0) | _BV(COM0A1)); // Disable toggle mode to idle output
+
   TCNT0 = 0; // Reset timer
   OCR0A = 20u; // Set compare register A to 20 to start
-  TCCR0A |= _BV(COM0A0); // Enable toggle mode
+  TCCR0A |= _BV(COM0A0);
+  //TCCR0B |= FOC0A; // Force a match to ensure we start with PB0 cleared
   TIMSK0 |= _BV(OCIE0A); // Enable compare match A interrupt
-  ACSR |= _BV(ACI); // Force clear the interrupt
+
+  ACSR |= _BV(ACI); // Force clear the analog comparator interrupt
 }
