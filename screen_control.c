@@ -6,8 +6,9 @@
 #define SCREEN_DOWN 0x002E6EFC
 //#define SCREEN_UP   0x007EECF0 // may need reversing for endianness
 #define SCREEN_UP   0x001E6EFC
-#define CMD_LENGTH  25
-#define REPETITIONS 10
+#define CMD_LENGTH_BITS   25
+#define DELAY_MULTIPLIER  40
+#define REPETITIONS       25
 
 #define ON_SHORT  52u // 340 usec
 #define ON_LONG   152u // 980 usec
@@ -20,7 +21,7 @@
 
 uint8_t phase = PHASE_ON;
 uint8_t lowering = 0x01;
-uint8_t bitsToSend = CMD_LENGTH;
+uint8_t bitsToSend = CMD_LENGTH_BITS;
 uint8_t repetitions = REPETITIONS;
 static uint32_t sendBuf = SCREEN_DOWN;
 
@@ -40,7 +41,7 @@ int main (void)
 
   TCNT0 = 0; // Reset timer
   OCR0A = 20u; // Set compare register A to 20 to start
-  TCCR0A = _BV(COM0A0) | _BV(WGM01); // Toggle OC0A on match; CTC mode
+  TCCR0A = _BV(COM0A0) | _BV(COM0A1) | _BV(WGM01); // Set OC0A on match; CTC mode
   TCCR0B = _BV(CS01) | _BV(CS00); // clock frequency / 64
   TIMSK0 = _BV(OCIE0A); // Enable compare match A interrupt
   
@@ -60,6 +61,18 @@ void sendPreamble() {
   _delay_ms(11);
 }
 
+void clearCompAOnMatch() {
+  TCCR0A = (TCCR0A | _BV(COM0A1)) & ~_BV(COM0A0);
+}
+
+void setCompAOnMatch() {
+  TCCR0A |= _BV(COM0A0) | _BV(COM0A1);
+}
+
+void disableCompAOutput() {
+  TCCR0A &= ~(_BV(COM0A0) | _BV(COM0A1));
+}
+
 ISR(TIM0_COMPA_vect) // Timer 0 compare match A interrupt - generate waveforms
 {
   PORTB |= _BV(PB2); // enable PB2
@@ -69,6 +82,7 @@ ISR(TIM0_COMPA_vect) // Timer 0 compare match A interrupt - generate waveforms
       // Long on sequence for a one, short for a zero
       OCR0A = (sendBuf & 0x01) ? ON_LONG : ON_SHORT;
       phase = PHASE_OFF;
+      clearCompAOnMatch();
       break;
     case PHASE_OFF: // Set off time for a zero or one and shift buffer or switch to idle
       bitsToSend -= 1;
@@ -77,11 +91,12 @@ ISR(TIM0_COMPA_vect) // Timer 0 compare match A interrupt - generate waveforms
         OCR0A = (sendBuf & 0x01) ? OFF_SHORT : OFF_LONG;
         sendBuf >>= 1;
         phase = PHASE_ON;
+        setCompAOnMatch();
       } else {
         // End of a pattern; reset buffer and switch to idling
         sendBuf = lowering ? SCREEN_DOWN : SCREEN_UP;
-        bitsToSend = CMD_LENGTH;
-        TCCR0A &= ~(_BV(COM0A0) | _BV(COM0A1)); // Disable toggle mode to idle output
+        bitsToSend = DELAY_MULTIPLIER;
+        disableCompAOutput();
         PORTB &= ~_BV(PB0); // Ensure state is low
         OCR0A = 200u;
         phase = PHASE_DELAY;
@@ -91,11 +106,11 @@ ISR(TIM0_COMPA_vect) // Timer 0 compare match A interrupt - generate waveforms
       bitsToSend -= 1;
       if (bitsToSend == 0) {
         repetitions -= 1;
-        bitsToSend = CMD_LENGTH;
+        bitsToSend = CMD_LENGTH_BITS;
         phase = PHASE_ON;
         if (repetitions > 0) {
           // Switch back to toggle mode so we keep sending packets
-          TCCR0A |= _BV(COM0A0);
+          setCompAOnMatch();
         } else {
           // Done repeating; prepare for sending a screen_up on power loss
           lowering = 0x00;
@@ -115,14 +130,11 @@ ISR(ANA_COMP_vect) // Analog comparator interrupt vector - here if we've lost po
 {
   ACSR &= ~_BV(ACIE); // Disable ACR interrupt so we only get tnterrupted for timer A
   sendPreamble();
-  //TCCR0A |= _BV(COM0A1); // Enable clear mode
-  //TCCR0B |= FOC0A; // Force a match to ensure we start with PB0 cleared
-  //TCCR0A &= ~(_BV(COM0A0) | _BV(COM0A1)); // Disable toggle mode to idle output
 
   TCNT0 = 0; // Reset timer
   OCR0A = 20u; // Set compare register A to 20 to start
-  TCCR0A |= _BV(COM0A0);
-  //TCCR0B |= FOC0A; // Force a match to ensure we start with PB0 cleared
+  setCompAOnMatch();
+  TIFR0 |= _BV(OCF0A); // Force clear the timer interrupt so we don't immediately enter the ISR
   TIMSK0 |= _BV(OCIE0A); // Enable compare match A interrupt
 
   ACSR |= _BV(ACI); // Force clear the analog comparator interrupt
